@@ -1,0 +1,1 @@
+var build = WebApplication.CreateBuilder(args);
