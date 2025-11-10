@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vigenere Cipher Client</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; }
+    input, textarea, button { width: 100%; padding: 8px; margin: 6px 0; }
+    button { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Vigenere Cipher Web Client</h1>
+
+  <h2>Шифрование</h2>
+  <textarea id="encryptText" placeholder="Введите текст"></textarea>
+  <input id="encryptKey" placeholder="Введите ключ" />
+  <button onclick="encrypt()">Зашифровать</button>
+  <textarea id="encryptResult" readonly placeholder="Результат"></textarea>
+
+  <h2>Дешифрование</h2>
+  <textarea id="decryptText" placeholder="Введите зашифрованный текст"></textarea>
+  <input id="decryptKey" placeholder="Введите ключ" />
+  <button onclick="decrypt()">Расшифровать</button>
+  <textarea id="decryptResult" readonly placeholder="Результат"></textarea>
+
+  <script>
+    async function encrypt() {
+      const text = document.getElementById('encryptText').value;
+      const key = document.getElementById('encryptKey').value;
+      const response = await fetch('/encrypt?text=' + encodeURIComponent(text) + '&key=' + encodeURIComponent(key), { method: 'POST' });
+      document.getElementById('encryptResult').value = await response.text();
+    }
+
+    async function decrypt() {
+      const text = document.getElementById('decryptText').value;
+      const key = document.getElementById('decryptKey').value;
+      const response = await fetch('/decrypt?text=' + encodeURIComponent(text) + '&key=' + encodeURIComponent(key), { method: 'POST' });
+      document.getElementById('decryptResult').value = await response.text();
+    }
+  </script>
+</body>
+</html>
