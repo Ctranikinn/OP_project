@@ -28,11 +28,19 @@ const string DB_PATH = "users.db";
 
 app.MapGet("/", () => "Vigenere Cipher Web API");
 
-app.MapPost("/encrypt", (string text, string key) => rg.Encrypt(text, key))
-    .RequireAuthorization();
+app.MapPost("/encrypt", [Authorize] (HttpContext context, string text, string key) => 
+    {
+        string username = context.User.Identity?.Name ?? "unknown";;
+        ClientLogger.Log("ENCRYPT", $"{username} | Key length: {key.Trim().Length}");
+        return rg.Encrypt(text, key);
+    }).RequireAuthorization();
 
-app.MapPost("/decrypt", (string text, string key) => rg.Decrypt(text, key))
-    .RequireAuthorization();
+app.MapPost("/decrypt", [Authorize] (HttpContext context, string text, string key) => 
+    {
+        string username = context.User.Identity?.Name ?? "unknown";;
+        ClientLogger.Log("DECRYPT", $"{username} | Key length: {key.Trim().Length}");
+        return rg.Decrypt(text, key);
+    }).RequireAuthorization();
 
 app.MapPost("/login", async (HttpContext context) =>
 {
@@ -210,8 +218,8 @@ public class VigenereCipher
 
 // ====================== АДАПТЕР К WEB ==========================
 public class RGWebAdapter {
-    private VigenereCipher cipher = new VigenereCipher();
-    public DBManager db = new DBManager();
+    private readonly VigenereCipher cipher = new VigenereCipher();
+    public readonly DBManager db = new DBManager();
     public IResult Encrypt(string text, string key) {
         return Results.Ok(cipher.Encrypt(text, key));
     }
@@ -223,11 +231,22 @@ public class RGWebAdapter {
 
 public static class ClientLogger
 {
-    private static readonly string path = "client.log";
+    private static readonly string path = "actions.log";  // Можно отдельный файл от client.log
 
-    public static void Log(string action, string? user = null)
+    public static void Log(string action, string? details = null)
     {
-        string line = $"{DateTime.Now:u} | {action} | {user}";
-        File.AppendAllText(path, line + Environment.NewLine);
+        string username = details?.Split('|').FirstOrDefault()?.Trim() ?? "unknown";
+        string extra = details != null ? " | " + details : "";
+        
+        string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} | {action} | USER: {username}{extra}";
+        
+        try
+        {
+            File.AppendAllText(path, line + Environment.NewLine);
+        }
+        catch
+        {
+            // Если не удалось записать — просто игнорируем (не падаем)
+        }
     }
 }

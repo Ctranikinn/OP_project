@@ -27,18 +27,56 @@
 
   <script>
     async function encrypt() {
-      const text = document.getElementById('encryptText').value;
-      const key = document.getElementById('encryptKey').value;
-      const response = await fetch('/encrypt?text=' + encodeURIComponent(text) + '&key=' + encodeURIComponent(key), { method: 'POST' });
-      document.getElementById('encryptResult').value = await response.text();
+        const text = document.getElementById('encryptText').value.trim();
+        const key = document.getElementById('encryptKey').value.trim();
+
+        if (!text) {
+            document.getElementById('encryptResult').value = "Ошибка: введите текст!";
+            return;
+        }
+        if (!key) {
+            document.getElementById('encryptResult').value = "Ошибка: введите ключ!";
+            return;
+        }
+
+        const response = await fetch(`/encrypt?text=${encodeURIComponent(text)}&key=${encodeURIComponent(key)}`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            const result = await response.text();
+            document.getElementById('encryptResult').value = result;
+        } else {
+            const error = await response.text();
+            document.getElementById('encryptResult').value = "Ошибка: " + error;
+        }
     }
 
     async function decrypt() {
-      const text = document.getElementById('decryptText').value;
-      const key = document.getElementById('decryptKey').value;
-      const response = await fetch('/decrypt?text=' + encodeURIComponent(text) + '&key=' + encodeURIComponent(key), { method: 'POST' });
-      document.getElementById('decryptResult').value = await response.text();
+        const text = document.getElementById('decryptText').value.trim();
+        const key = document.getElementById('decryptKey').value.trim();
+
+        if (!text) {
+            document.getElementById('decryptResult').value = "Ошибка: введите текст!";
+            return;
+        }
+        if (!key) {
+            document.getElementById('decryptResult').value = "Ошибка: введите ключ!";
+            return;
+        }
+
+        const response = await fetch(`/decrypt?text=${encodeURIComponent(text)}&key=${encodeURIComponent(key)}`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            const result = await response.text();
+            document.getElementById('decryptResult').value = result;
+        } else {
+            const error = await response.text();
+            document.getElementById('decryptResult').value = "Ошибка: " + error;
+        }
     }
-  </script>
+</script>
 </body>
 </html>
