@@ -2,69 +2,43 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Авторизация / Регистрация</title>
+    <title>Авторизация</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; }
+        body { font-family: Arial; max-width: 400px; margin: 50px auto; }
         input, button { width: 100%; padding: 8px; margin: 6px 0; }
-        .container { border: 1px solid #aaa; padding: 20px; border-radius: 6px; }
-        .toggle { text-align: center; margin-top: 10px; cursor: pointer; color: blue; }
+        .error { color: red; }
+        .success { color: green; }
     </style>
 </head>
 <body>
 
-<div class="container" id="loginForm">
-    <h2>Вход</h2>
-    <input id="login_username" placeholder="Логин">
-    <input id="login_password" placeholder="Пароль" type="password">
-    <button onclick="login()">Войти</button>
-    <div class="toggle" onclick="showRegister()">Нет аккаунта? Зарегистрироваться</div>
-</div>
-
-<div class="container" id="registerForm" style="display:none;">
-    <h2>Регистрация</h2>
-    <input id="reg_username" placeholder="Логин">
-    <input id="reg_password" placeholder="Пароль" type="password">
-    <button onclick="register()">Зарегистрироваться</button>
-    <div class="toggle" onclick="showLogin()">Уже есть аккаунт? Войти</div>
-</div>
-
+<h2>Вход</h2>
+<form method="post" action="/login">
+    <input name="login" placeholder="Логин" required>
+    <input name="password" type="password" placeholder="Пароль" required>
+    <button type="submit">Войти</button>
+</form>
 <script>
-function showRegister() {
-    document.getElementById('loginForm').style.display = 'none';
-    document.getElementById('registerForm').style.display = 'block';
-}
-
-function showLogin() {
-    document.getElementById('registerForm').style.display = 'none';
-    document.getElementById('loginForm').style.display = 'block';
-}
-
-async function login() {
-    let login = document.getElementById("login_username").value;
-    let pass = document.getElementById("login_password").value;
-
-    let response = await fetch("/login?login=" + login + "&password=" + pass, { method: "POST" });
-    
-    if (response.ok) {
-        window.location.href = "/vigenere"; // Редирект после входа
-    } else {
-        alert("Неверный логин или пароль!");
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('error')) {
+        document.write('<p class="error">Неверный логин или пароль</p>');
     }
-}
+</script>
 
-async function register() {
-    let login = document.getElementById("reg_username").value;
-    let pass = document.getElementById("reg_password").value;
+<hr>
 
-    let response = await fetch("/signup?login=" + login + "&password=" + pass, { method: "POST" });
-
-    if (response.ok) {
-        alert("Регистрация успешна! Теперь войдите.");
-        showLogin();
-    } else {
-        alert("Ошибка регистрации");
+<h2>Регистрация</h2>
+<form method="post" action="/signup">
+    <input name="login" placeholder="Логин" required>
+    <input name="password" type="password" placeholder="Пароль" required>
+    <button type="submit">Зарегистрироваться</button>
+</form>
+<script>
+    if (urlParams.has('reg_error')) {
+        document.write('<p class="error">Ошибка регистрации (логин уже существует?)</p>');
+    } else if (urlParams.has('reg_ok')) {
+        document.write('<p class="success">Регистрация успешна! Теперь войдите.</p>');
     }
-}
 </script>
 
 </body>

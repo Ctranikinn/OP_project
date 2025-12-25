@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+using System;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
@@ -8,8 +8,8 @@ public class DBManager {
 
     private string HashPassword(string password) {
         using (var algorithm = SHA256.Create()) {
-            var bytes_hash = algorithm.ComputeHash(Encoding.Unicode.GetBytes(password));
-            return Encoding.Unicode.GetString(bytes_hash);
+            var bytes_hash = algorithm.ComputeHash(Encoding.UTF8.GetBytes(password));
+            return Convert.ToBase64String(bytes_hash);
         }
     }
 
@@ -24,6 +24,16 @@ public class DBManager {
             if (connection.State != System.Data.ConnectionState.Open) {
                 Console.WriteLine("Failed!");
                 return false;
+            }
+            
+            string createTableQuery = @"
+                CREATE TABLE IF NOT EXISTS users (
+                    Login TEXT PRIMARY KEY,
+                    Password TEXT NOT NULL
+                )";
+            using (var command = new SqliteCommand(createTableQuery, connection))
+            {
+                command.ExecuteNonQuery();
             }
         }
         catch (Exception exp) {
@@ -54,23 +64,22 @@ public class DBManager {
         if (connection.State != System.Data.ConnectionState.Open)
             return false;
 
-        string REQUEST = "INSERT INTO users (Login, Password) VALUES ('" + login + "', '" + HashPassword(password) + "')";
-        var command = new SqliteCommand(REQUEST, connection);
-
-        int result = 0;
-        try
+        string request = "INSERT INTO users (Login, Password) VALUES (@login, @password)";
+        using (var command = new SqliteCommand(request, connection))
         {
-            result = command.ExecuteNonQuery();
-        }
-        catch (Exception exp) {
-            Console.WriteLine(exp.Message);
-            return false;
-        }
+            command.Parameters.AddWithValue("@login", login);
+            command.Parameters.AddWithValue("@password", HashPassword(password));
 
-        if (1 == result)
-            return true;
-        else
-            return false;
+            try
+            {
+                int result = command.ExecuteNonQuery();
+                return result == 1;
+            }
+            catch (Exception exp) {
+                Console.WriteLine(exp.Message);
+                return false;
+            }
+        }
     }
 
     public bool CheckUser(string login, string password) {
@@ -80,21 +89,23 @@ public class DBManager {
         if (connection.State != System.Data.ConnectionState.Open)
             return false;
 
-        string REQUEST = "SELECT Login,Password FROM users WHERE Login='" + login + "' AND Password = '" + HashPassword(password) + "'";
-        var command = new SqliteCommand(REQUEST, connection);
-
-        try
+        string request = "SELECT Login FROM users WHERE Login = @login AND Password = @password";
+        using (var command = new SqliteCommand(request, connection))
         {
-            var reader = command.ExecuteReader();
+            command.Parameters.AddWithValue("@login", login);
+            command.Parameters.AddWithValue("@password", HashPassword(password));
 
-            if (reader.HasRows)
-                return true;
-            else
+            try
+            {
+                using (var reader = command.ExecuteReader())
+                {
+                    return reader.HasRows;
+                }
+            }
+            catch (Exception exp) {
+                Console.WriteLine(exp.Message);
                 return false;
-        }
-        catch (Exception exp) {
-            Console.WriteLine(exp.Message);
-            return false;
+            }
         }
     }
 }

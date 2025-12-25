@@ -9,8 +9,13 @@ using SixLabors.ImageSharp.PixelFormats;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie();
 builder.Services.AddAuthorization();
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/auth";           // Куда редиректить при отсутствии авторизации
+        options.AccessDeniedPath = "/auth";     // Куда редиректить при запрете доступа
+    });
 
 var app = builder.Build();
 app.UseStaticFiles(); 
@@ -19,12 +24,39 @@ app.UseAuthorization();
 
 RGWebAdapter rg = new RGWebAdapter();
 
+const string DB_PATH = "users.db";
+
 app.MapGet("/", () => "Vigenere Cipher Web API");
 
-app.MapPost("/encrypt", (string text, string key) => rg.Encrypt(text, key));
-app.MapPost("/decrypt", (string text, string key) => rg.Decrypt(text, key));
+app.MapPost("/encrypt", (string text, string key) => rg.Encrypt(text, key))
+    .RequireAuthorization();
 
-app.MapPost("/login", (string login, string password, HttpContext context) => rg.LogIn(login, password, context));
+app.MapPost("/decrypt", (string text, string key) => rg.Decrypt(text, key))
+    .RequireAuthorization();
+
+app.MapPost("/login", async (HttpContext context) =>
+{
+    var form = await context.Request.ReadFormAsync();
+    string login = form["login"];
+    string password = form["password"];
+
+    if (!rg.db.CheckUser(login, password))
+        return Results.Redirect("/auth?error=1");
+
+    var claims = new List<Claim>
+    {
+        new Claim(ClaimTypes.Name, login)
+    };
+
+    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+    var principal = new ClaimsPrincipal(identity);
+
+    await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
+    ClientLogger.Log("LOGIN_SUCCESS", login);
+
+    return Results.Redirect("/vigenere");
+});
 
 app.MapGet("/check_user", [Authorize] (HttpContext context) => {
     if (context.User.Identity == null) 
@@ -32,53 +64,27 @@ app.MapGet("/check_user", [Authorize] (HttpContext context) => {
     return Results.Ok(context.User.Identity.Name);
 });
 
-app.MapPost("/signup", (string login, string password) =>
+app.MapPost("/signup", async (HttpContext context) =>
 {
-    if (rg.db.AddUser(login, password))
-        return Results.Ok("User " + login + " registered successfully!");
-    else
-        return Results.Problem("Failed to register user " + login);
+    var form = await context.Request.ReadFormAsync();
+    string login = form["login"];
+    string password = form["password"];
+
+    if (!rg.db.AddUser(login, password))
+        return Results.Redirect("/auth?reg_error=1");
+
+    ClientLogger.Log("REGISTER", login);
+
+    return Results.Redirect("/auth?reg_ok=1");
 });
 
 app.MapGet("/vigenere", async context =>
 {
-    await context.Response.SendFileAsync("D:/VPN/Курсач ОП/Client/vigenere_client.html");
-});
+    await context.Response.SendFileAsync("vigenere_client.html");
+}).RequireAuthorization();
 
-app.MapPost("/picture", (HttpRequest request) => {
-    try
-    {
-        var memoryStream = new MemoryStream();
-        request.Body.CopyToAsync(memoryStream).Wait();
-        memoryStream.Seek(0, SeekOrigin.Begin);
-        Image image = Image.Load<Rgba32>(memoryStream);
-        return Results.Ok("Received image " + image.Width + "x" + image.Height);
-    }
-    catch (Exception exp)
-    {
-        return Results.BadRequest("Wrong image format: " + exp.Message);
-    }
-});
 
-app.MapPost("/picture_form", ([FromForm] UploadImageModel model) => {
-    if (model.picture == null || model.picture.Length == 0)
-        return Results.BadRequest(new { message = "Файл изображения не найден или пуст." });
 
-    try
-    {
-        var memoryStream = new MemoryStream();
-        model.picture.CopyToAsync(memoryStream).Wait();
-        memoryStream.Seek(0, SeekOrigin.Begin);
-        Image image = Image.Load<Rgba32>(memoryStream);
-        return Results.Ok("Received image " + image.Width + "x" + image.Height);
-    }
-    catch (Exception exp)
-    {
-        return Results.BadRequest("Wrong image format: " + exp.Message);
-    }
-}).DisableAntiforgery();
-
-const string DB_PATH = "D:/VPN/Курсач ОП/Client/users.db";
 if (!rg.db.ConnectToDB(DB_PATH))
 {
     Console.WriteLine("Failed to connect to db " + DB_PATH);
@@ -88,7 +94,7 @@ if (!rg.db.ConnectToDB(DB_PATH))
 
 app.MapGet("/auth", async context =>
 {
-    await context.Response.SendFileAsync("D:/VPN/Курсач ОП/Client/auth.html");
+    await context.Response.SendFileAsync("auth.html");
 });
 
 app.Run();
@@ -98,45 +104,105 @@ rg.db.Disconnect();
 // ======================= ЛОГИКА ШИФРА ВИЖЕНЕРА =============================
 public class VigenereCipher
 {
-    private const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private const string engAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private const string rusAlphabet = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
+    private static readonly string fullAlphabet = engAlphabet + rusAlphabet.ToLower() + rusAlphabet + engAlphabet.ToLower();
 
-    private char EncodeChar(char c, char k)
+    private char ProcessChar(char c, char k, bool encrypt)
     {
-        int pi = alphabet.IndexOf(char.ToUpper(c));
-        int ki = alphabet.IndexOf(char.ToUpper(k));
-        if (pi == -1) return c;
-        return alphabet[(pi + ki) % 26];
-    }
+        char upperC = char.ToUpper(c);
+        char upperK = char.ToUpper(k);
 
-    private char DecodeChar(char c, char k)
-    {
-        int ci = alphabet.IndexOf(char.ToUpper(c));
-        int ki = alphabet.IndexOf(char.ToUpper(k));
-        if (ci == -1) return c;
-        return alphabet[(ci - ki + 26) % 26];
+        int alphabetIndex = -1;
+        char baseAlphabetChar = '\0';
+
+        if (engAlphabet.Contains(upperC))
+        {
+            alphabetIndex = engAlphabet.IndexOf(upperC);
+            baseAlphabetChar = 'A';
+        }
+        else if (rusAlphabet.Contains(upperC))
+        {
+            alphabetIndex = rusAlphabet.IndexOf(upperC);
+            baseAlphabetChar = 'А';
+        }
+
+        if (alphabetIndex == -1)
+            return c;
+
+        int keyIndex = fullAlphabet.IndexOf(upperK);
+        if (keyIndex == -1)
+            return c;
+
+        int keyShift;
+        if (keyIndex < engAlphabet.Length)
+            keyShift = keyIndex;
+        else if (keyIndex < engAlphabet.Length + rusAlphabet.Length * 2)
+            keyShift = keyIndex - engAlphabet.Length - rusAlphabet.Length; 
+        else
+            keyShift = keyIndex - engAlphabet.Length - rusAlphabet.Length * 2;
+
+        if (rusAlphabet.Contains(upperK))
+            keyShift = rusAlphabet.IndexOf(upperK);
+        else
+            keyShift = engAlphabet.IndexOf(upperK);
+
+        int shift = encrypt ? keyShift : -keyShift;
+        int newIndex = (alphabetIndex + shift + (rusAlphabet.Contains(upperC) ? rusAlphabet.Length : engAlphabet.Length)) % 
+                       (rusAlphabet.Contains(upperC) ? rusAlphabet.Length : engAlphabet.Length);
+
+        char result = (rusAlphabet.Contains(upperC) ? rusAlphabet : engAlphabet)[newIndex];
+
+        return char.IsLower(c) ? char.ToLower(result) : result;
     }
 
     public string Encrypt(string text, string key)
     {
+        if (string.IsNullOrEmpty(text)) return text;
+        if (string.IsNullOrEmpty(key)) return text;
+
         string result = "";
         int keyIndex = 0;
+
         foreach (char c in text)
         {
-            result += EncodeChar(c, key[keyIndex]);
-            keyIndex = (keyIndex + 1) % key.Length;
+            if (char.IsLetter(c))
+            {
+                char keyChar = key[keyIndex % key.Length];
+                result += ProcessChar(c, keyChar, true);
+                keyIndex++;
+            }
+            else
+            {
+                result += c; 
+            }
         }
+
         return result;
     }
 
     public string Decrypt(string text, string key)
     {
+        if (string.IsNullOrEmpty(text)) return text;
+        if (string.IsNullOrEmpty(key)) return text;
+
         string result = "";
         int keyIndex = 0;
+
         foreach (char c in text)
         {
-            result += DecodeChar(c, key[keyIndex]);
-            keyIndex = (keyIndex + 1) % key.Length;
+            if (char.IsLetter(c))
+            {
+                char keyChar = key[keyIndex % key.Length];
+                result += ProcessChar(c, keyChar, false);
+                keyIndex++;
+            }
+            else
+            {
+                result += c;
+            }
         }
+
         return result;
     }
 }
@@ -146,17 +212,6 @@ public class VigenereCipher
 public class RGWebAdapter {
     private VigenereCipher cipher = new VigenereCipher();
     public DBManager db = new DBManager();
-
-    public async Task<IResult> LogIn(string login, string password, HttpContext context) {
-        if (db.CheckUser(login, password)) {
-            var claims = new List<Claim> { new Claim(ClaimTypes.Name, login) };
-            var claimsIdentity = new ClaimsIdentity(claims, "Cookies");
-            await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(claimsIdentity));
-            return Results.Ok();
-        }
-        return Results.Unauthorized();
-    }
-
     public IResult Encrypt(string text, string key) {
         return Results.Ok(cipher.Encrypt(text, key));
     }
@@ -166,9 +221,13 @@ public class RGWebAdapter {
     }
 }
 
-
-// ===================== МОДЕЛЬ ДЛЯ КАРТИНОК ====================
-public class UploadImageModel
+public static class ClientLogger
 {
-    public IFormFile picture { get; set; } = default!;
+    private static readonly string path = "client.log";
+
+    public static void Log(string action, string? user = null)
+    {
+        string line = $"{DateTime.Now:u} | {action} | {user}";
+        File.AppendAllText(path, line + Environment.NewLine);
+    }
 }

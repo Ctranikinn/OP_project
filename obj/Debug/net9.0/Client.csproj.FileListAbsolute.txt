@@ -56,3 +56,4 @@ D:\VPN\Курсач ОП\Client\obj\Debug\net9.0\refint\Client.dll
 D:\VPN\Курсач ОП\Client\obj\Debug\net9.0\Client.pdb
 D:\VPN\Курсач ОП\Client\obj\Debug\net9.0\Client.genruntimeconfig.cache
 D:\VPN\Курсач ОП\Client\obj\Debug\net9.0\ref\Client.dll
+D:\VPN\Курсач ОП\Client\obj\Debug\net9.0\Client.sourcelink.json
