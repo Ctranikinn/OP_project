@@ -2,10 +2,6 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -122,17 +118,14 @@ public class VigenereCipher
         char upperK = char.ToUpper(k);
 
         int alphabetIndex = -1;
-        char baseAlphabetChar = '\0';
 
         if (engAlphabet.Contains(upperC))
         {
             alphabetIndex = engAlphabet.IndexOf(upperC);
-            baseAlphabetChar = 'A';
         }
         else if (rusAlphabet.Contains(upperC))
         {
             alphabetIndex = rusAlphabet.IndexOf(upperC);
-            baseAlphabetChar = 'А';
         }
 
         if (alphabetIndex == -1)
@@ -231,7 +224,7 @@ public class RGWebAdapter {
 
 public static class ClientLogger
 {
-    private static readonly string path = "actions.log";  // Можно отдельный файл от client.log
+    private static readonly string path = "actions.log";
 
     public static void Log(string action, string? details = null)
     {
@@ -246,7 +239,7 @@ public static class ClientLogger
         }
         catch
         {
-            // Если не удалось записать — просто игнорируем (не падаем)
+            // Если не удалось записать — игнорируем
         }
     }
 }
